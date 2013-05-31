@@ -12,6 +12,7 @@ struct ImageStatisticsProcessParams
 {
 	OfxRectI _rect; ///< the selected rectangle, clipped to the image rod
 	EParamChooseOutput _chooseOutput;
+	bool _useAlphaAsAWeightMask;
 };
 
 /**
@@ -31,6 +32,8 @@ public:
 	ImageStatisticsProcessParams getProcessParams( const OfxRectI& srcRod ) const;
 
 public:
+	OFX::BooleanParam* _paramUseAlphaAsAWeightMask;
+
 	OFX::ChoiceParam* _paramCoordinateSystem;
 	OFX::Double2DParam* _paramRectCenter;
 	OFX::Double2DParam* _paramRectSize;
@@ -38,20 +41,23 @@ public:
 
 	OFX::RGBAParam* _paramOutputAverage;
 	OFX::RGBAParam* _paramOutputVariance;
+	OFX::RGBAParam* _paramOutputStdDeviation;
+	OFX::RGBAParam* _paramOutputSkewness;
+	OFX::RGBAParam* _paramOutputKurtosis;
 	OFX::RGBAParam* _paramOutputChannelMin;
 	OFX::RGBAParam* _paramOutputChannelMax;
 	OFX::RGBAParam* _paramOutputLuminosityMin;
 	OFX::RGBAParam* _paramOutputLuminosityMax;
-	OFX::RGBAParam* _paramOutputKurtosis;
-	OFX::RGBAParam* _paramOutputSkewness;
 
 	OFX::Double3DParam* _paramOutputAverageHSL;
+	OFX::Double3DParam* _paramOutputVarianceHSL;
+	OFX::Double3DParam* _paramOutputStdDeviationHSL;
+	OFX::Double3DParam* _paramOutputSkewnessHSL;
+	OFX::Double3DParam* _paramOutputKurtosisHSL;
 	OFX::Double3DParam* _paramOutputChannelMinHSL;
 	OFX::Double3DParam* _paramOutputChannelMaxHSL;
 	OFX::Double3DParam* _paramOutputLuminosityMinHSL;
 	OFX::Double3DParam* _paramOutputLuminosityMaxHSL;
-	OFX::Double3DParam* _paramOutputKurtosisHSL;
-	OFX::Double3DParam* _paramOutputSkewnessHSL;
 };
 
 }

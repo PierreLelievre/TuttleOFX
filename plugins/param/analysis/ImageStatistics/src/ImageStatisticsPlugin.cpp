@@ -16,6 +16,8 @@ namespace imageStatistics {
 ImageStatisticsPlugin::ImageStatisticsPlugin( OfxImageEffectHandle handle )
 	: ImageEffectGilPlugin( handle )
 {
+	_paramUseAlphaAsAWeightMask   = fetchBooleanParam( kParamUseAlphaAsAWeightMask );
+
 	_paramCoordinateSystem = fetchChoiceParam( kParamCoordinateSystem );
 	_paramRectCenter       = fetchDouble2DParam( kParamRectCenter );
 	_paramRectSize         = fetchDouble2DParam( kParamRectSize );
@@ -23,20 +25,24 @@ ImageStatisticsPlugin::ImageStatisticsPlugin( OfxImageEffectHandle handle )
 
 	_paramOutputAverage       = fetchRGBAParam( kParamOutputAverage );
 	_paramOutputVariance      = fetchRGBAParam( kParamOutputVariance );
+	_paramOutputStdDeviation  = fetchRGBAParam( kParamOutputStdDeviation );
+	_paramOutputSkewness      = fetchRGBAParam( kParamOutputSkewness );
+	_paramOutputKurtosis      = fetchRGBAParam( kParamOutputKurtosis );
 	_paramOutputChannelMin    = fetchRGBAParam( kParamOutputChannelMin );
 	_paramOutputChannelMax    = fetchRGBAParam( kParamOutputChannelMax );
 	_paramOutputLuminosityMin = fetchRGBAParam( kParamOutputLuminosityMin );
 	_paramOutputLuminosityMax = fetchRGBAParam( kParamOutputLuminosityMax );
-	_paramOutputKurtosis      = fetchRGBAParam( kParamOutputKurtosis );
-	_paramOutputSkewness      = fetchRGBAParam( kParamOutputSkewness );
 
 	_paramOutputAverageHSL       = fetchDouble3DParam( kParamOutputAverageHSL );
+	_paramOutputVarianceHSL      = fetchDouble3DParam( kParamOutputVarianceHSL );
+	_paramOutputStdDeviationHSL  = fetchDouble3DParam( kParamOutputStdDeviationHSL );
+	_paramOutputSkewnessHSL      = fetchDouble3DParam( kParamOutputSkewnessHSL );
+	_paramOutputKurtosisHSL      = fetchDouble3DParam( kParamOutputKurtosisHSL );
 	_paramOutputChannelMinHSL    = fetchDouble3DParam( kParamOutputChannelMinHSL );
 	_paramOutputChannelMaxHSL    = fetchDouble3DParam( kParamOutputChannelMaxHSL );
 	_paramOutputLuminosityMinHSL = fetchDouble3DParam( kParamOutputLuminosityMinHSL );
 	_paramOutputLuminosityMaxHSL = fetchDouble3DParam( kParamOutputLuminosityMaxHSL );
-	_paramOutputKurtosisHSL      = fetchDouble3DParam( kParamOutputKurtosisHSL );
-	_paramOutputSkewnessHSL      = fetchDouble3DParam( kParamOutputSkewnessHSL );
+
 }
 
 ImageStatisticsProcessParams ImageStatisticsPlugin::getProcessParams( const OfxRectI& srcRod ) const
@@ -60,6 +66,8 @@ ImageStatisticsProcessParams ImageStatisticsPlugin::getProcessParams( const OfxR
 	params._rect.y2      = boost::numeric_cast<int>( std::ceil( rectCenter.y + rectSize.y ) );
 	params._rect         = rectanglesIntersection( params._rect, srcRod );
 	params._chooseOutput = static_cast<EParamChooseOutput>( _paramChooseOutput->getValue() );
+
+	params._useAlphaAsAWeightMask = _paramUseAlphaAsAWeightMask->getValue();
 
 	return params;
 }

@@ -55,6 +55,10 @@ void ImageStatisticsPluginFactory::describeInContext( OFX::ImageEffectDescriptor
 	dstClip->addSupportedComponent( OFX::ePixelComponentAlpha );
 	dstClip->setSupportsTiles( kSupportTiles );
 
+	OFX::BooleanParamDescriptor* useAlphaAsAWeightMask = desc.defineBooleanParam( kParamUseAlphaAsAWeightMask );
+	useAlphaAsAWeightMask->setLabel( "Use alpha as a weight mask" );
+	useAlphaAsAWeightMask->setDefault( false );
+
 	OFX::ChoiceParamDescriptor* coordSystem = desc.defineChoiceParam( kParamCoordinateSystem );
 	coordSystem->setLabel( "Coordinate system" );
 	coordSystem->appendOption( kParamCoordinateSystemNormalized );
@@ -78,6 +82,7 @@ void ImageStatisticsPluginFactory::describeInContext( OFX::ImageEffectDescriptor
 	chooseOutput->appendOption( kParamChooseOutputSource );
 	chooseOutput->appendOption( kParamChooseOutputAverage );
 	chooseOutput->appendOption( kParamChooseOutputVariance );
+	chooseOutput->appendOption( kParamChooseOutputStdDeviation );
 	chooseOutput->appendOption( kParamChooseOutputChannelMin );
 	chooseOutput->appendOption( kParamChooseOutputChannelMax );
 	chooseOutput->appendOption( kParamChooseOutputLuminosityMin );
@@ -104,7 +109,22 @@ void ImageStatisticsPluginFactory::describeInContext( OFX::ImageEffectDescriptor
 	outputVariance->setLabel( "Variance" );
 	outputVariance->setParent( rgbaGroup );
 	outputVariance->setEvaluateOnChange( false );
-	
+
+	OFX::RGBAParamDescriptor* outputStdDeviation = desc.defineRGBAParam( kParamOutputStdDeviation );
+	outputStdDeviation->setLabel( "Standard deviation" );
+	outputStdDeviation->setParent( rgbaGroup );
+	outputStdDeviation->setEvaluateOnChange( false );
+
+	OFX::RGBAParamDescriptor* outputSkewness = desc.defineRGBAParam( kParamOutputSkewness );
+	outputSkewness->setLabel( "Skewness" );
+	outputSkewness->setParent( rgbaGroup );
+	outputSkewness->setEvaluateOnChange( false );
+
+	OFX::RGBAParamDescriptor* outputKurtosis = desc.defineRGBAParam( kParamOutputKurtosis );
+	outputKurtosis->setLabel( "Kurtosis" );
+	outputKurtosis->setParent( rgbaGroup );
+	outputKurtosis->setEvaluateOnChange( false );
+
 	OFX::RGBAParamDescriptor* outputChannelMin = desc.defineRGBAParam( kParamOutputChannelMin );
 	outputChannelMin->setLabel( "Channels' min" );
 	outputChannelMin->setHint( "Minimum value per channel" );
@@ -126,16 +146,6 @@ void ImageStatisticsPluginFactory::describeInContext( OFX::ImageEffectDescriptor
 	outputLuminosityMax->setParent( rgbaGroup );
 	outputLuminosityMax->setEvaluateOnChange( false );
 
-	OFX::RGBAParamDescriptor* outputKurtosis = desc.defineRGBAParam( kParamOutputKurtosis );
-	outputKurtosis->setLabel( "Kurtosis" );
-	outputKurtosis->setParent( rgbaGroup );
-	outputKurtosis->setEvaluateOnChange( false );
-
-	OFX::RGBAParamDescriptor* outputSkewness = desc.defineRGBAParam( kParamOutputSkewness );
-	outputSkewness->setLabel( "Skewness" );
-	outputSkewness->setParent( rgbaGroup );
-	outputSkewness->setEvaluateOnChange( false );
-
 	// -----------------------------------------------------------------------------
 
 	OFX::GroupParamDescriptor* hslGroup = desc.defineGroupParam( kParamOutputGroupHSL );
@@ -149,6 +159,34 @@ void ImageStatisticsPluginFactory::describeInContext( OFX::ImageEffectDescriptor
 	outputAverageHSL->setDimensionLabels( "h", "s", "l" );
 	outputAverageHSL->setParent( hslGroup );
 	outputAverageHSL->setEvaluateOnChange( false );
+
+	OFX::Double3DParamDescriptor* outputVarianceHSL = desc.defineDouble3DParam( kParamOutputVarianceHSL );
+	outputVarianceHSL->setLabel( "Variance" );
+	outputVarianceHSL->setDoubleType( OFX::eDoubleTypePlain );
+	outputVarianceHSL->setDimensionLabels( "h", "s", "l" );
+	outputVarianceHSL->setParent( hslGroup );
+	outputVarianceHSL->setEvaluateOnChange( false );
+
+	OFX::Double3DParamDescriptor* outputStdDeviationHSL = desc.defineDouble3DParam( kParamOutputStdDeviationHSL );
+	outputStdDeviationHSL->setLabel( "Standard deviation" );
+	outputStdDeviationHSL->setDoubleType( OFX::eDoubleTypePlain );
+	outputStdDeviationHSL->setDimensionLabels( "h", "s", "l" );
+	outputStdDeviationHSL->setParent( hslGroup );
+	outputStdDeviationHSL->setEvaluateOnChange( false );
+
+	OFX::Double3DParamDescriptor* outputSkewnessHSL = desc.defineDouble3DParam( kParamOutputSkewnessHSL );
+	outputSkewnessHSL->setLabel( "Skewness" );
+	outputSkewnessHSL->setDoubleType( OFX::eDoubleTypePlain );
+	outputSkewnessHSL->setDimensionLabels( "h", "s", "l" );
+	outputSkewnessHSL->setParent( hslGroup );
+	outputSkewnessHSL->setEvaluateOnChange( false );
+
+	OFX::Double3DParamDescriptor* outputKurtosisHSL = desc.defineDouble3DParam( kParamOutputKurtosisHSL );
+	outputKurtosisHSL->setLabel( "Kurtosis" );
+	outputKurtosisHSL->setDoubleType( OFX::eDoubleTypePlain );
+	outputKurtosisHSL->setDimensionLabels( "h", "s", "l" );
+	outputKurtosisHSL->setParent( hslGroup );
+	outputKurtosisHSL->setEvaluateOnChange( false );
 
 	OFX::Double3DParamDescriptor* outputChannelMinHSL = desc.defineDouble3DParam( kParamOutputChannelMinHSL );
 	outputChannelMinHSL->setLabel( "Channels' min" );
@@ -179,19 +217,6 @@ void ImageStatisticsPluginFactory::describeInContext( OFX::ImageEffectDescriptor
 	outputLuminosityMaxHSL->setParent( hslGroup );
 	outputLuminosityMaxHSL->setEvaluateOnChange( false );
 
-	OFX::Double3DParamDescriptor* outputKurtosisHSL = desc.defineDouble3DParam( kParamOutputKurtosisHSL );
-	outputKurtosisHSL->setLabel( "Kurtosis" );
-	outputKurtosisHSL->setDoubleType( OFX::eDoubleTypePlain );
-	outputKurtosisHSL->setDimensionLabels( "h", "s", "l" );
-	outputKurtosisHSL->setParent( hslGroup );
-	outputKurtosisHSL->setEvaluateOnChange( false );
-
-	OFX::Double3DParamDescriptor* outputSkewnessHSL = desc.defineDouble3DParam( kParamOutputSkewnessHSL );
-	outputSkewnessHSL->setLabel( "Skewness" );
-	outputSkewnessHSL->setDoubleType( OFX::eDoubleTypePlain );
-	outputSkewnessHSL->setDimensionLabels( "h", "s", "l" );
-	outputSkewnessHSL->setParent( hslGroup );
-	outputSkewnessHSL->setEvaluateOnChange( false );
 }
 
 /**
