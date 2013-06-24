@@ -21,6 +21,8 @@
 #include <boost/mpl/erase.hpp>
 #include <boost/mpl/find.hpp>
 
+#include <limits>
+
 /*
 namespace boost {
 namespace gil {
@@ -96,14 +98,44 @@ namespace tuttle {
 namespace plugin {
 namespace imageStatistics {
 
+
 template< typename CType, typename Layout >
-struct premultiplied
+struct getAlpha
 {
 	typedef boost::gil::pixel<CType, Layout> CPixel;
 	
 	//GIL_FORCEINLINE
+	double operator()( const CPixel& src, const std::size_t nb );
+};
+
+template< typename CType, typename Layout >
+double getAlpha<CType, Layout>::operator()( const boost::gil::pixel<CType, Layout >& src, const std::size_t nb )
+{
+	typedef boost::gil::pixel<CType, Layout > CPixel;
+	double dst = nb;
+	return dst;
+}
+
+template< >
+double getAlpha< boost::gil::bits64f, boost::gil::rgba_layout_t >::operator()( const boost::gil::pixel<boost::gil::bits64f, boost::gil::rgba_layout_t >& src, const std::size_t nb )
+{
+	using namespace boost::gil;
+	typedef boost::gil::pixel<boost::gil::bits64f, boost::gil::rgba_layout_t > CPixel;
+    double dst = get_color( src, alpha_t() );
+	return dst;
+}
+
+
+template< typename CType, typename Layout >
+struct premultiplied
+{
+	typedef boost::gil::pixel<CType, Layout> CPixel;
+    typedef boost::gil::pixel<CType, boost::gil::layout<boost::gil::gray_t> > CPixelGray;
+	
+	//GIL_FORCEINLINE
 	CPixel operator()( const CPixel& src );
 	CPixel operator()( const CPixel& src, const CPixel& alpha );
+	CPixelGray operator()( const CPixelGray& src, const CPixel& alpha );
 };
 
 template< typename CType, typename Layout >
@@ -119,6 +151,14 @@ boost::gil::pixel<CType, Layout > premultiplied<CType, Layout>::operator()( cons
 {
 	typedef boost::gil::pixel<CType, Layout > CPixel;
 	CPixel dst = src;
+	return dst;
+}
+
+template< typename CType, typename Layout >
+boost::gil::pixel<CType, boost::gil::layout<boost::gil::gray_t> > premultiplied<CType, Layout>::operator()( const boost::gil::pixel<CType, boost::gil::layout<boost::gil::gray_t> >& src, const boost::gil::pixel<CType, Layout >& alpha )
+{
+	typedef boost::gil::pixel<CType, boost::gil::layout<boost::gil::gray_t> > CPixelGray;
+	CPixelGray dst = src;
 	return dst;
 }
 
@@ -148,43 +188,71 @@ boost::gil::pixel<boost::gil::bits64f, boost::gil::rgba_layout_t > premultiplied
 	return dst;
 }
 
+template< >
+boost::gil::pixel<boost::gil::bits64f, boost::gil::layout<boost::gil::gray_t> > premultiplied< boost::gil::bits64f, boost::gil::rgba_layout_t >::operator()( const boost::gil::pixel<boost::gil::bits64f, boost::gil::layout<boost::gil::gray_t> >& src, const boost::gil::pixel<boost::gil::bits64f, boost::gil::rgba_layout_t >& alpha )
+{
+	using namespace boost::gil;
+	typedef boost::gil::pixel<boost::gil::bits64f, boost::gil::layout<boost::gil::gray_t> > CPixelGray;
+	CPixelGray dst;
+	get_color( dst, gray_color_t() )   = 1.f * get_color( src, gray_color_t() )   * get_color( alpha, alpha_t() );
+	return dst;
+}
+
+
+template< typename T >
+struct variance
+{	
+	//GIL_FORCEINLINE
+	T operator()( const T v_mean, const T v_sum_p2, const std::size_t nb );
+	T operator()( const T v_mean, const T v_sum_p2, const double nb );
+};
+
 template<typename T>
-T variance( const T v_mean, const T v_sum_p2, const std::size_t nb )
+T variance<T>::operator()( const T v_mean, const T v_sum_p2, const std::size_t nb )
 {
 	using namespace boost::units;
 	return ( v_sum_p2 / nb - pow<2>( v_mean ) );
 }
 
 template<typename T>
-T variance( const T v_mean, const T v_sum_p2, const double nb )
+T variance<T>::operator()( const T v_mean, const T v_sum_p2, const double nb )
 {
 	using namespace boost::units;
 	return ( v_sum_p2 / nb - pow<2>( v_mean ) );
 }
 
+template< typename Pixel >
+struct pixel_variance
+{	
+	//GIL_FORCEINLINE
+	Pixel operator()( const Pixel& v_mean, const Pixel& v_sum_p2, const std::size_t nb );
+	Pixel operator()( const Pixel& v_mean, const Pixel& v_sum_p2, const double nb );
+};
+
 template<typename Pixel>
-Pixel pixel_variance( const Pixel& v_mean, const Pixel& v_sum_p2, const std::size_t nb )
+Pixel pixel_variance<Pixel>::operator()( const Pixel& v_mean, const Pixel& v_sum_p2, const std::size_t nb )
 {
 	using namespace boost::gil;
 	Pixel res;
 	for( int i = 0; i < num_channels<Pixel>::type::value; ++i )
 	{
-		res[i] = variance( v_mean[i], v_sum_p2[i], nb );
+		res[i] = variance<double>()( v_mean[i], v_sum_p2[i], nb );
 	}
 	return res;
 }
 
 template<typename Pixel>
-Pixel pixel_variance( const Pixel& v_mean, const Pixel& v_sum_p2, const double nb )
+Pixel pixel_variance<Pixel>::operator()( const Pixel& v_mean, const Pixel& v_sum_p2, const double nb )
 {
 	using namespace boost::gil;
 	Pixel res;
 	for( int i = 0; i < num_channels<Pixel>::type::value; ++i )
 	{
-		res[i] = variance( v_mean[i], v_sum_p2[i], nb );
+		res[i] = variance<double>()( v_mean[i], v_sum_p2[i], nb );
 	}
 	return res;
 }
+
 
 /**
  * @brief In probability theory and statistics, skewness is a measure of the
@@ -194,43 +262,61 @@ Pixel pixel_variance( const Pixel& v_mean, const Pixel& v_sum_p2, const double n
  * on both sides of the mean, typically but not necessarily implying
  * a symmetric distribution.
  */
+
+template< typename T >
+struct skewness
+{	
+	//GIL_FORCEINLINE
+	T operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const std::size_t nb );
+	T operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const double nb );
+};
+
 template<typename T>
-T skewness( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const std::size_t nb )
+T skewness<T>::operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const std::size_t nb )
 {
 	using namespace boost::units;
 	return ( ( v_sum_p3 - 3.0 * v_mean * v_sum_p2 ) / nb + 2.0 * pow<3>( v_mean ) ) / pow<3>( v_standard_deviation );
 }
 
 template<typename T>
-T skewness( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const double nb )
+T skewness<T>::operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const double nb )
 {
 	using namespace boost::units;
 	return ( ( v_sum_p3 - 3.0 * v_mean * v_sum_p2 ) / nb + 2.0 * pow<3>( v_mean ) ) / pow<3>( v_standard_deviation );
 }
 
+template< typename Pixel >
+struct pixel_skewness
+{	
+	//GIL_FORCEINLINE
+	Pixel operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const std::size_t nb );
+	Pixel operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const double nb );
+};
+
 template<typename Pixel>
-Pixel pixel_skewness( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const std::size_t nb )
+Pixel pixel_skewness<Pixel>::operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const std::size_t nb )
 {
 	using namespace boost::gil;
 	Pixel res;
 	for( int i = 0; i < num_channels<Pixel>::type::value; ++i )
 	{
-		res[i] = skewness( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], nb );
+		res[i] = skewness<double>()( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], nb );
 	}
 	return res;
 }
 
 template<typename Pixel>
-Pixel pixel_skewness( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const double nb )
+Pixel pixel_skewness<Pixel>::operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const double nb )
 {
 	using namespace boost::gil;
 	Pixel res;
 	for( int i = 0; i < num_channels<Pixel>::type::value; ++i )
 	{
-		res[i] = skewness( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], nb );
+		res[i] = skewness<double>()( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], nb );
 	}
 	return res;
 }
+
 
 /**
  * @brief In probability theory and statistics, kurtosis is a measure of the
@@ -239,43 +325,61 @@ Pixel pixel_skewness( const Pixel& v_mean, const Pixel& v_standard_deviation, co
  * Higher kurtosis means more of the variance is the result of infrequent extreme deviations,
  * as opposed to frequent modestly sized deviations.
  */
+
+template< typename T >
+struct kurtosis
+{	
+	//GIL_FORCEINLINE
+	T operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const T v_sum_p4, const std::size_t nb );
+	T operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const T v_sum_p4, const double nb );
+};
+
 template<typename T>
-T kurtosis( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const T v_sum_p4, const std::size_t nb )
+T kurtosis<T>::operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const T v_sum_p4, const std::size_t nb )
 {
 	using namespace boost::units;
 	return ( ( ( v_sum_p4 - 4.0 * v_mean * v_sum_p3 + 6.0 * pow<2>( v_mean ) * v_sum_p2 ) / nb - 3.0 * pow<4>( v_mean ) ) / ( pow<4>( v_standard_deviation ) ) );
 }
 
 template<typename T>
-T kurtosis( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const T v_sum_p4, const double nb )
+T kurtosis<T>::operator()( const T v_mean, const T v_standard_deviation, const T v_sum_p2, const T v_sum_p3, const T v_sum_p4, const double nb )
 {
 	using namespace boost::units;
 	return ( ( ( v_sum_p4 - 4.0 * v_mean * v_sum_p3 + 6.0 * pow<2>( v_mean ) * v_sum_p2 ) / nb - 3.0 * pow<4>( v_mean ) ) / ( pow<4>( v_standard_deviation ) ) );
 }
 
+template< typename Pixel >
+struct pixel_kurtosis
+{	
+	//GIL_FORCEINLINE
+	Pixel operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const Pixel& v_sum_p4, const std::size_t nb );
+	Pixel operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const Pixel& v_sum_p4, const double nb );
+};
+
 template<typename Pixel>
-Pixel pixel_kurtosis( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const Pixel& v_sum_p4, const std::size_t nb )
+Pixel pixel_kurtosis<Pixel>::operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const Pixel& v_sum_p4, const std::size_t nb )
 {
 	using namespace boost::gil;
 	Pixel res;
 	for( int i = 0; i < num_channels<Pixel>::type::value; ++i )
 	{
-		res[i] = kurtosis( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], v_sum_p4[i], nb );
+		res[i] = kurtosis<double>()( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], v_sum_p4[i], nb );
 	}
 	return res;
 }
 
 template<typename Pixel>
-Pixel pixel_kurtosis( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const Pixel& v_sum_p4, const double nb )
+Pixel pixel_kurtosis<Pixel>::operator()( const Pixel& v_mean, const Pixel& v_standard_deviation, const Pixel& v_sum_p2, const Pixel& v_sum_p3, const Pixel& v_sum_p4, const double nb )
 {
 	using namespace boost::gil;
 	Pixel res;
 	for( int i = 0; i < num_channels<Pixel>::type::value; ++i )
 	{
-		res[i] = kurtosis( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], v_sum_p4[i], nb );
+		res[i] = kurtosis<double>()( v_mean[i], v_standard_deviation[i], v_sum_p2[i], v_sum_p3[i], v_sum_p4[i], nb );
 	}
 	return res;
 }
+
 
 template<class Pixel>
 struct OutputParams
@@ -312,6 +416,7 @@ struct ComputeOutputParams
 	typedef typename View::value_type Pixel;
 	typedef typename boost::gil::color_space_type<View>::type Colorspace;
 	typedef boost::gil::pixel<typename boost::gil::channel_type<View>::type, boost::gil::layout<boost::gil::gray_t> > PixelGray; // grayscale pixel type (using the input channel_type)
+	typedef boost::gil::pixel<CType, boost::gil::layout<boost::gil::gray_t> > CPixelGray; // the pixel type use for computation (using grayscale pixel type)
 	typedef boost::gil::pixel<CType, boost::gil::layout<Colorspace> > CPixel; // the pixel type use for computation (using input colorspace)
 
 	typedef OutputParams<CPixel> Output;
@@ -328,28 +433,33 @@ struct ComputeOutputParams
 		PixelGray firstPixelGray;
 		color_convert( firstPixel, firstPixelGray );
 
-		Pixel channelMin            = firstPixel;
-		Pixel channelMax            = firstPixel;
-		Pixel luminosityMin         = firstPixel;
-		Pixel luminosityMax         = firstPixel;
-		PixelGray luminosityMinGray = firstPixelGray;
-		PixelGray luminosityMaxGray = firstPixelGray;
+		CPixel channelMin;
+		CPixel channelMax;
+		CPixel luminosityMin;
+		CPixel luminosityMax;
+		CPixelGray luminosityMinGray;
+		CPixelGray luminosityMaxGray;
 
-		/*CPixel channelMinWgt
-		CPixel channelMaxWgt
-		CPixel luminosityMinWgt
-		CPixel luminosityMaxWgt
-		PixelGray luminosityMinGrayWgt
-		PixelGray luminosityMaxGrayWgt
+		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, channelMin );
+		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, channelMax );
+		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, luminosityMin );
+		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, luminosityMax );
+		pixel_assigns_t<PixelGray, CPixelGray>( )( firstPixelGray, luminosityMinGray );
+		pixel_assigns_t<PixelGray, CPixelGray>( )( firstPixelGray, luminosityMaxGray );
 
-		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, channelMinWgt );
-		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, channelMaxWgt );
-		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, luminosityMinWgt );
-		pixel_assigns_t<Pixel, CPixel>( )( firstPixel, luminosityMaxWgt );
-		pixel_assigns_t<PixelGray, PixelGray>( )( firstPixelGray, luminosityMinGray );
-		pixel_assigns_t<PixelGray, PixelGray>( )( firstPixelGray, luminosityMaxGray );
+		CPixel channelMinWgt;
+		CPixel channelMaxWgt;
+		CPixel luminosityMinWgt;
+		CPixel luminosityMaxWgt;
+		CPixelGray luminosityMinGrayWgt;
+		CPixelGray luminosityMaxGrayWgt;
 
-		pixel_assigns_t<CPixel, CPixel>( )(premultiplied<CType, boost::gil::layout<Colorspace> >()( channelMinWgt ), channelMinWgt );*/
+		pixel_assigns_scalar_t<double, CPixel>( )( std::numeric_limits<double>::max(), channelMinWgt );
+		pixel_assigns_scalar_t<double, CPixel>( )( std::numeric_limits<double>::min(), channelMaxWgt );
+		pixel_assigns_scalar_t<double, CPixel>( )( std::numeric_limits<double>::max(), luminosityMinWgt );
+		pixel_assigns_scalar_t<double, CPixel>( )( std::numeric_limits<double>::min(), luminosityMaxWgt );
+		pixel_assigns_scalar_t<double, CPixelGray>( )( std::numeric_limits<double>::max(), luminosityMinGrayWgt );
+		pixel_assigns_scalar_t<double, CPixelGray>( )( std::numeric_limits<double>::min(), luminosityMaxGrayWgt );
 
 		CPixel sum;
 		CPixel sum_p2;
@@ -406,65 +516,74 @@ struct ComputeOutputParams
 				pixel_plus_assign_t<CPixel, CPixel>( )( pixWgt_p4, sumWgt_p4 ); // sumWgt_p4 += pixWgt_p4;
 
 				// search min for each channel
-				pixel_assign_min_t<Pixel, Pixel>( )( * src_it, channelMin );
-				//pixel_assign_min_t<Pixel, Pixel>( )( pixel_multiplies_scalar_t<Pixel, double>() ( * src_it, get_color( * src_it, alpha_t() )), channelMinWgt );
-				// search max for each channel
-				pixel_assign_max_t<Pixel, Pixel>( )( * src_it, channelMax );
-				//pixel_assign_max_t<Pixel, Pixel>( )( pixel_multiplies_scalar_t<Pixel, double>() ( * src_it, get_color( * src_it, alpha_t() )), channelMaxWgt );
+				pixel_assign_min_t<CPixel, CPixel>( )( pix, channelMin );
+				if(getAlpha<CType, boost::gil::layout<Colorspace> >()( pix, 1 ) != 0.0)
+				{
+					pixel_assign_min_t<CPixel, CPixel>( )( premultiplied<CType, boost::gil::layout<Colorspace> >()( pix ), channelMinWgt );
+				}
 
-				PixelGray grayCurrentPixel; // current pixel in gray colorspace
-				//PixelGray grayCurrentPixelWgt; // current pixelWght in gray colorspace
-				color_convert( * src_it, grayCurrentPixel );
-				//color_convert( pixel_multiplies_scalar_t<Pixel, double>() ( * src_it, get_color( * src_it, alpha_t() )), grayCurrentPixel );
+				// search max for each channel
+				pixel_assign_max_t<CPixel, CPixel>( )( pix, channelMax );
+				if(getAlpha<CType, boost::gil::layout<Colorspace> >()( pix, 1 ) != 0.0)
+				{
+					pixel_assign_max_t<CPixel, CPixel>( )( premultiplied<CType, boost::gil::layout<Colorspace> >()( pix ), channelMaxWgt );
+				}
+
+				PixelGray grayCurrentPixelTmp;
+				color_convert( * src_it, grayCurrentPixelTmp );
+				CPixelGray grayCurrentPixel; // current pixel in gray colorspace
+				CPixelGray grayCurrentPixelWgt; // current pixelWght in gray colorspace
+				pixel_assigns_t<PixelGray, CPixelGray>( )(grayCurrentPixelTmp, grayCurrentPixel );
+				pixel_assigns_t<CPixelGray, CPixelGray>( )(premultiplied<CType, boost::gil::layout<Colorspace> >()( grayCurrentPixel, pix), grayCurrentPixelWgt );
 
 				// search min luminosity
-				if( get_color( grayCurrentPixel, gray_color_t() ) < get_color( luminosityMinGray, gray_color_t() ) )
+				if( get_color( grayCurrentPixel, gray_color_t() ) < get_color( luminosityMinGray, gray_color_t() )  && (getAlpha<CType, boost::gil::layout<Colorspace> >()( pix, 1 ) != 0.0 ) )
 				{
-					luminosityMin     = *src_it;
-					luminosityMinGray = grayCurrentPixel;
+					pixel_assigns_t<CPixel, CPixel>( )(pix, luminosityMin);
+					pixel_assigns_t<CPixelGray, CPixelGray>( )(grayCurrentPixel, luminosityMinGray);
 				}
 				// search max luminosity
-				if( get_color( grayCurrentPixel, gray_color_t() ) > get_color( luminosityMaxGray, gray_color_t() ) )
+				if( get_color( grayCurrentPixel, gray_color_t() ) > get_color( luminosityMaxGray, gray_color_t() )  && (getAlpha<CType, boost::gil::layout<Colorspace> >()( pix, 1 ) != 0.0 ) )
 				{
-					luminosityMax     = *src_it;
-					luminosityMaxGray = grayCurrentPixel;
+					pixel_assigns_t<CPixel, CPixel>( )(pix, luminosityMax);
+					pixel_assigns_t<CPixelGray, CPixelGray>( )(grayCurrentPixel, luminosityMaxGray);
 				}
 
-				/*// search min luminosity Wgt
-				if( get_color( grayCurrentPixelWgt, gray_color_t() ) < get_color( luminosityMinGrayWgt, gray_color_t() ) )
+				// search min luminosity Wgt
+				if( (get_color( grayCurrentPixelWgt, gray_color_t() ) < get_color( luminosityMinGrayWgt, gray_color_t() )) && (getAlpha<CType, boost::gil::layout<Colorspace> >()( pix, 1 )  != 0.0 ) )
 				{
-					luminosityMinWgt     = pixel_multiplies_scalar_t<Pixel, double>() ( * src_it, get_color( * src_it, alpha_t() ));
-					luminosityMinGrayWgt = grayCurrentPixelWgt;
+					pixel_assigns_t<CPixel, CPixel>( )(premultiplied<CType, boost::gil::layout<Colorspace> >()( pix ), luminosityMinWgt);
+					pixel_assigns_t<CPixelGray, CPixelGray>( )(grayCurrentPixelWgt, luminosityMinGrayWgt);
 				}
 				// search max luminosity Wgt
-				if( get_color( grayCurrentPixelWgt, gray_color_t() ) > get_color( luminosityMaxGrayWgt, gray_color_t() ) )
+				if( get_color( grayCurrentPixelWgt, gray_color_t() ) > get_color( luminosityMaxGrayWgt, gray_color_t() )  && (getAlpha<CType, boost::gil::layout<Colorspace> >()( pix, 1 ) != 0.0 ) )
 				{
-					luminosityMaxWgt     = pixel_multiplies_scalar_t<Pixel, double>() ( * src_it, get_color( * src_it, alpha_t() ));
-					luminosityMaxGrayWgt = grayCurrentPixelWgt;
-				}*/
+					pixel_assigns_t<CPixel, CPixel>( )(premultiplied<CType, boost::gil::layout<Colorspace> >()( pix ), luminosityMaxWgt);
+					pixel_assigns_t<CPixelGray, CPixelGray>( )(grayCurrentPixelWgt, luminosityMaxGrayWgt);
+				}
 			}
 		}
 
 		if( plugin._paramUseAlphaAsAWeightMask->getValue() )
 		{
-			double nbPixelsWgt = get_color( sum, alpha_t() );
+			double nbPixelsWgt = getAlpha<CType, boost::gil::layout<Colorspace> >()( sum, nbPixels );
 			output._average = pixel_divides_scalar_t<CPixel, double>() ( sumWgt, nbPixelsWgt );
-			output._variance = pixel_variance( output._average, sumWgt_p2, nbPixelsWgt );
+			output._variance = pixel_variance<Pixel>()( output._average, sumWgt_p2, nbPixelsWgt );
 			output._stdDeviation = pixel_sqrt_t<CPixel, Pixel>()( output._variance );
-			output._skewness = pixel_skewness( output._average, output._stdDeviation, sumWgt_p2, sumWgt_p3, nbPixelsWgt );
-			output._kurtosis = pixel_kurtosis( output._average, output._stdDeviation, sumWgt_p2, sumWgt_p3, sumWgt_p4, nbPixelsWgt );
-			output._channelMin    = channelMin;
-			output._channelMax    = channelMax;
-			output._luminosityMin = luminosityMin;
-			output._luminosityMax = luminosityMax;
+			output._skewness = pixel_skewness<Pixel>()( output._average, output._stdDeviation, sumWgt_p2, sumWgt_p3, nbPixelsWgt );
+			output._kurtosis = pixel_kurtosis<Pixel>()( output._average, output._stdDeviation, sumWgt_p2, sumWgt_p3, sumWgt_p4, nbPixelsWgt );
+			output._channelMin    = channelMinWgt;
+			output._channelMax    = channelMaxWgt;
+			output._luminosityMin = luminosityMinWgt;
+			output._luminosityMax = luminosityMaxWgt;
 		}
 		else
 		{
 			output._average = pixel_divides_scalar_t<CPixel, std::size_t>() ( sum, nbPixels );
-			output._variance = pixel_variance( output._average, sum_p2, nbPixels );
+			output._variance = pixel_variance<Pixel>()( output._average, sum_p2, nbPixels );
 			output._stdDeviation = pixel_sqrt_t<CPixel, Pixel>()( output._variance );
-			output._skewness = pixel_skewness( output._average, output._stdDeviation, sum_p2, sum_p3, nbPixels );
-			output._kurtosis = pixel_kurtosis( output._average, output._stdDeviation, sum_p2, sum_p3, sum_p4, nbPixels );
+			output._skewness = pixel_skewness<Pixel>()( output._average, output._stdDeviation, sum_p2, sum_p3, nbPixels );
+			output._kurtosis = pixel_kurtosis<Pixel>()( output._average, output._stdDeviation, sum_p2, sum_p3, sum_p4, nbPixels );
 			output._channelMin    = channelMin;
 		    output._channelMax    = channelMax;
 		    output._luminosityMin = luminosityMin;
